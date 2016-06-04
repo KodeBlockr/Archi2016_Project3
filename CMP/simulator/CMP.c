@@ -587,4 +587,552 @@ int toBigEndian(unsigned int k){
     k=a+b+c+d;
     return k;
 }
+void config_ICMP(int I_MEM_SIZE, int I_MEM_PAGE_SIZE, int I_CACHE_T_SIZE, int I_CACHE_BLOCK_SIZE, int I_CACHE_SET){
+    iMemSize = I_MEM_SIZE;
+    iMemPageSize = I_MEM_PAGE_SIZE;
+    iCacheTSize = I_CACHE_T_SIZE;
+    iCacheBlockSize = I_CACHE_BLOCK_SIZE;
+    iCacheSet = I_CACHE_SET;
+    iTLB_hit = 0;
+    iTLB_miss = 0;
+    iPT_hit = 0;
+    iPT_miss = 0;
+    I_page_table_entries = 1024/I_MEM_PAGE_SIZE;
+    I_TLB_entries = I_page_table_entries/4;
+    I_cache_entries = I_CACHE_T_SIZE/I_CACHE_SET/I_CACHE_BLOCK_SIZE;
+    I_mem_entries = I_MEM_SIZE/I_MEM_PAGE_SIZE;
+    int i;
+    for( i = 0; i < I_page_table_entries; i++){
+        IPT[i].PPN = 0;
+        IPT[i].valid = 0;
+    }
+    for( i = 0; i < I_page_table_entries; i++){
+        ITLB[i].PPN = 0;
+        ITLB[i].lastCycleUsed = 0;
+        ITLB[i].valid = 0;
+        ITLB[i].VPN = 0;
+    }
+    for(i = 0; i < I_mem_entries; i++){
+        IMEM[i].lastCycleUsed = 0;
+        IMEM[i].valid = 0;
+    }
+    int j ;
+    for(i = 0; i < I_cache_entries; i++){
+        for(j = 0; j < I_CACHE_SET; j++){
+            ICA[i][j].MRU = 0;
+            ICA[i][j].tag = 0;
+            ICA[i][j].valid = 0;
+        }
+    }
+
+}
+
+void config_DCMP(int D_MEM_SIZE, int D_MEM_PAGE_SIZE, int D_CACHE_T_SIZE, int D_CACHE_BLOCK_SIZE, int D_CACHE_SET){
+    dMemSize = D_MEM_SIZE;
+    dMemPageSize = D_MEM_PAGE_SIZE;
+    dCacheTSize = D_CACHE_T_SIZE;
+    dCacheBlockSize = D_CACHE_BLOCK_SIZE;
+    dCacheSet = D_CACHE_SET;
+    dTLB_hit = 0;
+    dTLB_miss = 0;
+    dPT_hit = 0;
+    dPT_miss = 0;
+    D_page_table_entries = 1024/D_MEM_PAGE_SIZE;
+    D_TLB_entries = D_page_table_entries/4;
+    D_cache_entries = D_CACHE_T_SIZE/D_CACHE_SET/D_CACHE_BLOCK_SIZE;
+    D_mem_entries = D_MEM_SIZE/D_MEM_PAGE_SIZE;
+    int i;
+    for( i = 0; i < D_page_table_entries; i++){
+        DPT[i].PPN = 0;
+        DPT[i].valid = 0;
+    }
+    for( i = 0; i < D_page_table_entries; i++){
+        DTLB[i].PPN = 0;
+        DTLB[i].lastCycleUsed = 0;
+        DTLB[i].valid = 0;
+        DTLB[i].VPN = 0;
+    }
+    for(i = 0; i < D_mem_entries; i++){
+        DMEM[i].lastCycleUsed = 0;
+        DMEM[i].valid = 0;
+    }
+    int j ;
+    for(i = 0; i < D_cache_entries; i++){
+        for(j = 0; j < D_CACHE_SET; j++){
+            DCA[i][j].MRU = 0;
+            DCA[i][j].tag = 0;
+            DCA[i][j].valid = 0;
+        }
+    }
+
+}
+
+void checkIMEM(int vAddress){
+    int vpn = vAddress/iMemPageSize;
+    int page_offset = vAddress%iMemPageSize;
+    int ppn, Iptppn, Ippn;
+    bool checkTLB = false; //find VPN in TLB
+    bool checkPT = false;
+    bool checkCa = false;
+    int i, j;
+    for(i = 0; i < I_TLB_entries ; i++){   // find TLB
+        if(ITLB[i].VPN == vpn && ITLB[i].valid == 1){
+            ITLB[i].lastCycleUsed = cycle;
+            ppn = ITLB[i].PPN;
+            checkTLB = true;
+            break;
+        }
+    }
+
+    if(checkTLB==false){ //TLB MISS!! Find PageTable
+        iTLB_miss++;
+        //Find PageTable
+        if(IPT[vpn].valid==1){
+            IMEM[IPT[vpn].PPN].lastCycleUsed= cycle;
+            Iptppn = IPT[vpn].PPN; //Hit
+            checkPT = true;
+        }else checkPT = false;
+
+        if(checkPT==false){  // PT miss!!
+            iPT_miss++;
+            int MIN = 500001;
+            int temp_ppn = 0;
+            bool check = false;
+            for(i = 0; i < I_mem_entries; i++){
+                if(IMEM[i].valid==0){
+                    temp_ppn = i;
+                    check = true;
+                    break;
+                }else{
+                    if(IMEM[i].lastCycleUsed<MIN){
+                        MIN = IMEM[i].lastCycleUsed;
+                        temp_ppn = i;
+                    }
+                }
+            }
+            IMEM[temp_ppn].lastCycleUsed = cycle;
+            IMEM[temp_ppn].valid = 1;
+
+            if(check){
+                IPT[vpn].PPN = temp_ppn;
+                IPT[vpn].valid = 1;
+            }else{
+                for(i = 0; i < I_page_table_entries; i++){
+                    if(IPT[i].PPN == temp_ppn){
+                        IPT[i].valid = 0;
+                    }
+                }
+                IPT[vpn].PPN = temp_ppn;
+                IPT[vpn].valid = 1;
+
+                for(i = 0; i < I_TLB_entries; i++){
+                    if(ITLB[i].PPN == temp_ppn){
+                        ITLB[i].valid = 0;
+                    }
+                }
+
+                for(j = 0; j < iMemPageSize; j++){
+                    int pAddress = temp_ppn * iMemPageSize + j;
+                    int pAddressBlock = pAddress/iCacheBlockSize;
+                    int block = pAddressBlock % I_cache_entries;
+                    int tag = pAddressBlock / I_cache_entries;
+                    if(iCacheSet == 1){
+                        if(ICA[block][0].tag == tag){
+                            ICA[block][0].valid = 0;
+                        }
+                    }else{
+                        for( i = 0; i < iCacheSet; i ++){
+                            if(ICA[block][i].tag == tag && ICA[block][i].valid == 1){
+                                ICA[block][i].valid = 0;
+                                ICA[block][i].MRU = 0;
+                            }
+                        }
+                    }
+                }
+            }
+
+            MIN = 500001;
+            int temp_address = 0;
+            for(i = 0; i < I_TLB_entries; i++){
+                if(ITLB[i].valid==0){
+                    temp_address = i;
+                    break;
+                }else if(ITLB[i].lastCycleUsed<MIN){
+                    MIN = ITLB[i].lastCycleUsed;
+                    temp_address = i;
+                }
+            }
+
+            ITLB[temp_address].lastCycleUsed = cycle;
+            ITLB[temp_address].valid = 1;
+            ITLB[temp_address].PPN = temp_ppn;
+            ITLB[temp_address].VPN = vpn;
+
+
+        }else{ //PT Hit!!
+            iPT_hit++;
+            int TLBMIN = 500001;
+            int TLB_temp_Address = 0;
+            int TLB_temp_ppn;
+            TLB_temp_ppn = IPT[vpn].PPN;
+            for(i = 0; i < I_TLB_entries; i++){
+                if(ITLB[i].valid==0){
+                    TLB_temp_Address = i;
+                    break;
+                }else if(ITLB[i].lastCycleUsed<TLBMIN){
+                    TLBMIN = ITLB[i].lastCycleUsed;
+                    TLB_temp_Address = i;
+                }
+            }
+            ITLB[TLB_temp_Address].lastCycleUsed = cycle;
+            ITLB[TLB_temp_Address].valid = 1;
+            ITLB[TLB_temp_Address].PPN = TLB_temp_ppn;
+            ITLB[TLB_temp_Address].VPN = vpn;
+        }
+    }else{  //TLB Hit!!
+        iTLB_hit++;
+    }
+    //TLB HIT and get PPN
+    // then check Cache Use CheckCA
+    for(i = 0; i < I_TLB_entries; i++){
+        if(ITLB[i].VPN == vpn && ITLB[i].valid == 1){
+            ITLB[i].lastCycleUsed = cycle;
+            Ippn = ITLB[i].PPN;
+            break;
+        }
+    }
+    checkCa = false ;
+    //check Cache
+    int CAPA = Ippn*iMemPageSize+page_offset;
+    int CAPAB = CAPA/iCacheBlockSize;
+    int block = CAPAB%I_cache_entries;
+    int tag = CAPAB/I_cache_entries;
+    int check = 0;
+    int temp_j = 0;
+
+    if(iCacheSet==1){
+        if(tag==ICA[block][0].tag && ICA[block][0].valid==1){
+            checkCa = true;
+        }
+    }else{
+        for(i = 0; i<iCacheSet; i++){
+            if(tag==ICA[block][i].tag && ICA[block][i].valid == 1){
+                for( j = 0; j < iCacheSet; j++){
+                    if(ICA[block][j].MRU==0){
+                        if(check == 0){
+                            temp_j = j;
+                            check = 1;
+                        }else{
+                            check = -1;
+                            break;
+                        }
+                    }
+                }
+                if(check == 1 && temp_j == i){
+                    for(j = 0; j < iCacheSet; j++){
+                        ICA[block][j].MRU = 0;
+                    }
+                }
+                ICA[block][i].MRU = 1;
+                checkCa = true;
+            }
+        }
+    }
+    if(checkCa==false){
+        iCA_miss++;
+        // Cache miss
+        CAPA = Ippn*iMemPageSize+page_offset;
+        CAPAB = CAPA/iCacheBlockSize;
+        block = CAPAB%I_cache_entries;
+        tag = CAPAB/I_cache_entries;
+        check = 0;
+        temp_j = 0;
+        int checkM = 0;
+        int get = 0;
+        int temp_i = 0;
+        if(iCacheSet==1){
+            ICA[block][0].MRU = 0;
+            ICA[block][0].tag = tag;
+            ICA[block][0].valid = 1;
+        }else{
+            for(i = 0; i < iCacheSet; i++){
+                if(ICA[block][i].valid==0){
+                    temp_i = i;
+                    check = 1;
+                    break;
+                }
+            }
+            for(i = 0; i < iCacheSet; i++){
+                if(ICA[block][i].MRU ==0){
+                    if(checkM==0){
+                       get = i;
+                       checkM = 1;
+                    }else{
+                        checkM = -1;
+                        break;
+                    }
+                }
+            }
+            if(check==1){
+                if(checkM==1&& temp_i ==  get){
+                    for(i=0; i < iCacheSet; i++){
+                        ICA[block][i].MRU = 0;
+                    }
+                }
+                ICA[block][get].MRU = 1;
+                ICA[block][get].tag = tag;
+                ICA[block][get].valid = 1;
+            }else{
+                if(checkM==1){
+                    for(i = 0; i < iCacheSet; i++){
+                        ICA[block][i].MRU = 0;
+                    }
+                }
+                ICA[block][get].MRU = 1;
+                ICA[block][get].tag = tag;
+                ICA[block][get].valid = 1;
+            }
+        }
+
+
+    }else{
+        iCA_hit++;
+    }
+
+
+}
+void checkDMEM(int vAddress){
+    int vpn = vAddress/dMemPageSize;
+    int page_offset = vAddress%dMemPageSize;
+    int ppn, Dptppn, Dppn;
+    bool checkTLB = false; //find VPN in TLB
+    bool checkPT = false;
+    bool checkCa = false;
+    int i, j;
+    for(i = 0; i < D_TLB_entries ; i++){   // find TLB
+        if(DTLB[i].VPN == vpn && DTLB[i].valid == 1){
+            DTLB[i].lastCycleUsed = cycle;
+            ppn = DTLB[i].PPN;
+            checkTLB = true;
+            break;
+        }
+    }
+
+    if(checkTLB==false){ //TLB MISS!! Find PageTable
+        dTLB_miss++;
+        //Find PageTable
+        if(DPT[vpn].valid==1){
+            DMEM[DPT[vpn].PPN].lastCycleUsed= cycle;
+            Dptppn = DPT[vpn].PPN; //Hit
+            checkPT = true;
+        }else checkPT = false;
+
+        if(checkPT==false){  // PT miss!!
+            dPT_miss++;
+            int MIN = 500001;
+            int temp_ppn = 0;
+            bool check = false;
+            for(i = 0; i < D_mem_entries; i++){
+                if(DMEM[i].valid==0){
+                    temp_ppn = i;
+                    check = true;
+                    break;
+                }else{
+                    if(DMEM[i].lastCycleUsed<MIN){
+                        MIN = DMEM[i].lastCycleUsed;
+                        temp_ppn = i;
+                    }
+                }
+            }
+            DMEM[temp_ppn].lastCycleUsed = cycle;
+            DMEM[temp_ppn].valid = 1;
+
+            if(check){
+                DPT[vpn].PPN = temp_ppn;
+                DPT[vpn].valid = 1;
+            }else{
+                for(i = 0; i < D_page_table_entries; i++){
+                    if(DPT[i].PPN == temp_ppn){
+                        DPT[i].valid = 0;
+                    }
+                }
+                DPT[vpn].PPN = temp_ppn;
+                DPT[vpn].valid = 1;
+
+                for(i = 0; i < D_TLB_entries; i++){
+                    if(DTLB[i].PPN == temp_ppn){
+                        DTLB[i].valid = 0;
+                    }
+                }
+
+                for(j = 0; j < dMemPageSize; j++){
+                    int pAddress = temp_ppn * dMemPageSize + j;
+                    int pAddressBlock = pAddress/dCacheBlockSize;
+                    int block = pAddressBlock % D_cache_entries;
+                    int tag = pAddressBlock / D_cache_entries;
+                    if(dCacheSet == 1){
+                        if(DCA[block][0].tag == tag){
+                            DCA[block][0].valid = 0;
+                        }
+                    }else{
+                        for( i = 0; i < dCacheSet; i ++){
+                            if(DCA[block][i].tag == tag && DCA[block][i].valid == 1){
+                                DCA[block][i].valid = 0;
+                                DCA[block][i].MRU = 0;
+                            }
+                        }
+                    }
+                }
+            }
+
+            MIN = 500001;
+            int temp_address = 0;
+            for(i = 0; i < D_TLB_entries; i++){
+                if(DTLB[i].valid==0){
+                    temp_address = i;
+                    break;
+                }else if(DTLB[i].lastCycleUsed<MIN){
+                    MIN = DTLB[i].lastCycleUsed;
+                    temp_address = i;
+                }
+            }
+
+            DTLB[temp_address].lastCycleUsed = cycle;
+            DTLB[temp_address].valid = 1;
+            DTLB[temp_address].PPN = temp_ppn;
+            DTLB[temp_address].VPN = vpn;
+
+
+        }else{ //PT Hit!!
+            dPT_hit++;
+            int DLBMIN = 500001;
+            int DLB_temp_Address = 0;
+            int DLB_temp_ppn;
+            DLB_temp_ppn = DPT[vpn].PPN;
+            for(i = 0; i < D_TLB_entries; i++){
+                if(DTLB[i].valid==0){
+                    DLB_temp_Address = i;
+                    break;
+                }else if(DTLB[i].lastCycleUsed<DLBMIN){
+                    DLBMIN = DTLB[i].lastCycleUsed;
+                    DLB_temp_Address = i;
+                }
+            }
+            DTLB[DLB_temp_Address].lastCycleUsed = cycle;
+            DTLB[DLB_temp_Address].valid = 1;
+            DTLB[DLB_temp_Address].PPN = DLB_temp_ppn;
+            DTLB[DLB_temp_Address].VPN = vpn;
+        }
+    }else{  //TLB Hit!!
+        dTLB_hit++;
+    }
+    //TLB HIT and get PPN
+    // then check Cache Use CheckCA
+    for(i = 0; i < D_TLB_entries; i++){
+        if(DTLB[i].VPN == vpn && DTLB[i].valid == 1){
+            DTLB[i].lastCycleUsed = cycle;
+            Dppn = DTLB[i].PPN;
+            break;
+        }
+    }
+    checkCa = false ;
+    //check Cache
+    int CAPA = Dppn*dMemPageSize+page_offset;
+    int CAPAB = CAPA/dCacheBlockSize;
+    int block = CAPAB%D_cache_entries;
+    int tag = CAPAB/D_cache_entries;
+    int check = 0;
+    int temp_j = 0;
+
+    if(dCacheSet==1){
+        if(tag==DCA[block][0].tag && DCA[block][0].valid==1){
+            checkCa = true;
+        }
+    }else{
+        for(i = 0; i<dCacheSet; i++){
+            if(tag==DCA[block][i].tag && DCA[block][i].valid == 1){
+                for( j = 0; j < dCacheSet; j++){
+                    if(DCA[block][j].MRU==0){
+                        if(check == 0){
+                            temp_j = j;
+                            check = 1;
+                        }else{
+                            check = -1;
+                            break;
+                        }
+                    }
+                }
+                if(check == 1 && temp_j == i){
+                    for(j = 0; j < dCacheSet; j++){
+                        DCA[block][j].MRU = 0;
+                    }
+                }
+                DCA[block][i].MRU = 1;
+                checkCa = true;
+            }
+        }
+    }
+    if(checkCa==false){
+        dCA_miss++;
+        // Cache miss
+        CAPA = Dppn*dMemPageSize+page_offset;
+        CAPAB = CAPA/dCacheBlockSize;
+        block = CAPAB%D_cache_entries;
+        tag = CAPAB/D_cache_entries;
+        check = 0;
+        temp_j = 0;
+        int checkM = 0;
+        int get = 0;
+        int temp_i = 0;
+        if(dCacheSet==1){
+            DCA[block][0].MRU = 0;
+            DCA[block][0].tag = tag;
+            DCA[block][0].valid = 1;
+        }else{
+            for(i = 0; i < dCacheSet; i++){
+                if(DCA[block][i].valid==0){
+                    temp_i = i;
+                    check = 1;
+                    break;
+                }
+            }
+            for(i = 0; i < dCacheSet; i++){
+                if(DCA[block][i].MRU ==0){
+                    if(checkM==0){
+                       get = i;
+                       checkM = 1;
+                    }else{
+                        checkM = -1;
+                        break;
+                    }
+                }
+            }
+            if(check==1){
+                if(checkM==1&& temp_i ==  get){
+                    for(i=0; i < dCacheSet; i++){
+                        DCA[block][i].MRU = 0;
+                    }
+                }
+                DCA[block][get].MRU = 1;
+                DCA[block][get].tag = tag;
+                DCA[block][get].valid = 1;
+            }else{
+                if(checkM==1){
+                    for(i = 0; i < dCacheSet; i++){
+                        DCA[block][i].MRU = 0;
+                    }
+                }
+                DCA[block][get].MRU = 1;
+                DCA[block][get].tag = tag;
+                DCA[block][get].valid = 1;
+            }
+        }
+
+
+    }else{
+        dCA_hit++;
+    }
+
+
+}
 
