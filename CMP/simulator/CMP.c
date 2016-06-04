@@ -44,6 +44,42 @@ int reg[100],dMemory[5000],num;
 int i=0,l,k,halt=0,tmp,tmpSigned,a,b,c,d,pc,sp,iNum,dNum,opcode,funct,rs,rt,rd,iCycle=0,dCycle=0,cycle=0,Cshamt,CimmediateUnsigned;
 short Cimmediate;
 
+int parameter[11];
+int par = 0;
+void config_ICMP(int I_MEM_SIZE, int I_MEM_PAGE_SIZE, int I_CACHE_T_SIZE, int I_CACHE_BLOCK_SIZE, int I_CACHE_SET);
+void config_DCMP(int D_MEM_SIZE, int D_MEM_PAGE_SIZE, int D_CACHE_T_SIZE, int D_CACHE_BLOCK_SIZE, int D_CACHE_SET);
+void checkIMEM(int vAddress);
+void checkDMEM(int vAddress);
+typedef struct TLB{
+    int VPN;
+    int PPN;
+    int lastCycleUsed;
+    int valid;
+}TLB;
+typedef struct PT{
+    int valid;
+    int PPN;
+}PT;
+typedef struct Cache{
+    int tag;
+    int valid;
+    int MRU;
+} Cache;
+typedef struct Memory{
+    int lastCycleUsed;
+    int valid;
+} Memory;
+
+TLB ITLB[1024], DTLB[1024];
+PT IPT[1024], DPT[1024];
+Cache ICA[1024][1024], DCA[1024][1024];
+Memory IMEM[1024], DMEM[1024];
+int iTLB_hit, iTLB_miss, iPT_hit, iPT_miss, iCA_miss, iCA_hit;
+int iMemSize, iMemPageSize, iCacheTSize, iCacheBlockSize, iCacheSet;
+int I_page_table_entries, I_TLB_entries, I_cache_entries, I_mem_entries;
+int dTLB_hit, dTLB_miss, dPT_hit, dPT_miss, dCA_miss, dCA_hit;
+int dMemSize, dMemPageSize, dCacheTSize, dCacheBlockSize, dCacheSet;
+int D_page_table_entries, D_TLB_entries, D_cache_entries, D_mem_entries;
 int main(int argc, char *argv[])
 {
     memset(iMemory,0,5000);
