@@ -156,6 +156,20 @@ int main(int argc, char *argv[])
         if(halt==1)break;
         printRegister();
     }
+    fclose(writeSnapshot);
+    fprintf(writeReport,"ICache :\n");
+    fprintf(writeReport,"# hits: %d\n# misses: %d\n\n",iCA_hit,iCA_miss);
+    fprintf(writeReport,"DCache :\n");
+    fprintf(writeReport,"# hits: %d\n# misses: %d\n\n",dCA_hit,dCA_miss);
+    fprintf(writeReport,"ITLB :\n");
+    fprintf(writeReport,"# hits: %d\n# misses: %d\n\n",iTLB_hit,iTLB_miss);
+    fprintf(writeReport,"DTLB :\n");
+    fprintf(writeReport,"# hits: %d\n# misses: %d\n\n",dTLB_hit,dTLB_miss);
+    fprintf(writeReport,"IPageTable :\n");
+    fprintf(writeReport,"# hits: %d\n# misses: %d\n\n",iPT_hit,iPT_miss);
+    fprintf(writeReport,"DPageTable :\n");
+    fprintf(writeReport,"# hits: %d\n# misses: %d\n\n",dPT_hit,dPT_miss);
+    fclose(writeReport);
 }
 
 void add(){
