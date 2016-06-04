@@ -44,6 +44,7 @@ int reg[100],dMemory[5000],num;
 int i=0,l,k,halt=0,tmp,tmpSigned,a,b,c,d,pc,sp,iNum,dNum,opcode,funct,rs,rt,rd,iCycle=0,dCycle=0,cycle=0,Cshamt,CimmediateUnsigned;
 short Cimmediate;
 
+/*-------------------------------------------------------*/
 int parameter[11];
 int par = 0;
 void config_ICMP(int I_MEM_SIZE, int I_MEM_PAGE_SIZE, int I_CACHE_T_SIZE, int I_CACHE_BLOCK_SIZE, int I_CACHE_SET);
@@ -80,6 +81,7 @@ int I_page_table_entries, I_TLB_entries, I_cache_entries, I_mem_entries;
 int dTLB_hit, dTLB_miss, dPT_hit, dPT_miss, dCA_miss, dCA_hit;
 int dMemSize, dMemPageSize, dCacheTSize, dCacheBlockSize, dCacheSet;
 int D_page_table_entries, D_TLB_entries, D_cache_entries, D_mem_entries;
+
 int main(int argc, char *argv[])
 {
     memset(iMemory,0,5000);
@@ -637,6 +639,7 @@ int toBigEndian(unsigned int k){
     k=a+b+c+d;
     return k;
 }
+
 void config_ICMP(int I_MEM_SIZE, int I_MEM_PAGE_SIZE, int I_CACHE_T_SIZE, int I_CACHE_BLOCK_SIZE, int I_CACHE_SET){
     iMemSize = I_MEM_SIZE;
     iMemPageSize = I_MEM_PAGE_SIZE;
@@ -838,6 +841,7 @@ void checkIMEM(int vAddress){
             ITLB[TLB_temp_Address].valid = 1;
             ITLB[TLB_temp_Address].PPN = TLB_temp_ppn;
             ITLB[TLB_temp_Address].VPN = vpn;
+            IMEM[TLB_temp_ppn].lastCycleUsed = cycle;
         }
     }else{  //TLB Hit!!
         iTLB_hit++;
@@ -873,7 +877,7 @@ void checkIMEM(int vAddress){
                             temp_j = j;
                             check = 1;
                         }else{
-                            check = -1;
+                            check = 0;
                             break;
                         }
                     }
@@ -929,9 +933,9 @@ void checkIMEM(int vAddress){
                         ICA[block][i].MRU = 0;
                     }
                 }
-                ICA[block][get].MRU = 1;
-                ICA[block][get].tag = tag;
-                ICA[block][get].valid = 1;
+                ICA[block][temp_i].MRU = 1;
+                ICA[block][temp_i].tag = tag;
+                ICA[block][temp_i].valid = 1;
             }else{
                 if(checkM==1){
                     for(i = 0; i < iCacheSet; i++){
@@ -1163,9 +1167,9 @@ void checkDMEM(int vAddress){
                         DCA[block][i].MRU = 0;
                     }
                 }
-                DCA[block][get].MRU = 1;
-                DCA[block][get].tag = tag;
-                DCA[block][get].valid = 1;
+                DCA[block][temp_i].MRU = 1;
+                DCA[block][temp_i].tag = tag;
+                DCA[block][temp_i].valid = 1;
             }else{
                 if(checkM==1){
                     for(i = 0; i < dCacheSet; i++){
@@ -1185,4 +1189,3 @@ void checkDMEM(int vAddress){
 
 
 }
-
